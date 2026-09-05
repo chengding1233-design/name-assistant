@@ -30,6 +30,7 @@
     padding:12px 14px; margin-bottom:8px; }
   .name-item .nm { font-size:21px; font-weight:600; letter-spacing:1px; }
   .name-item .sub { font-size:11px; color:var(--muted); margin-top:2px; }
+  .name-item .warn { font-size:11px; color:#c2410c; margin-top:3px; max-width:220px; }
   .nm-right { display:flex; align-items:center; gap:6px; }
   .search { margin-bottom:14px; }
   .res-card { background:#fff; border-radius:12px; padding:16px; }
@@ -84,6 +85,14 @@
   function saveAdded(arr) {
     try { localStorage.setItem(ADD_KEY, JSON.stringify(arr)); } catch (e) {}
   }
+  var FAV_KEY = "name_assistant_favs_v1";
+  function loadFavs() {
+    try { var v = JSON.parse(localStorage.getItem(FAV_KEY) || "[]"); return Array.isArray(v) ? v : []; }
+    catch (e) { return []; }
+  }
+  function saveFavs(arr) {
+    try { localStorage.setItem(FAV_KEY, JSON.stringify(arr)); } catch (e) {}
+  }
 
   var BASE = window.__DB__;
   var ElMessage = ElementPlus.ElMessage;
@@ -92,10 +101,11 @@
     data: function () {
       return {
         tab: "gen",
-        surname: "", gender: "不限", count: 10, mode: "real", alsoReal: true,
+        surname: "", gender: "不限", count: 10, mode: "real", nameLen: 3, alsoReal: true,
         query: "", lookupResult: null, results: [], realResults: [],
         uploading: false,
-        addedRecords: loadAdded()
+        addedRecords: loadAdded(),
+        favorites: loadFavs()
       };
     },
     computed: {
@@ -117,21 +127,44 @@
           { k: "有效记录", v: s.total }, { k: "不重名", v: s.uniq },
           { k: "男", v: s.male }, { k: "女", v: s.female }, { k: "你新增", v: s.added }
         ];
-      }
+      },
+      favCount: function () { return this.favorites.length; }
     },
     methods: {
       generate: function () {
         var n = parseInt(this.count, 10) || 10;
         var out = [], seen = {}, tries = 0;
         while (out.length < n && tries < n * 60) {
-          var r = NameCore.generate(this.built, this.surname, this.gender, this.mode);
+          var r = NameCore.generate(this.built, this.surname, this.gender, this.mode, this.nameLen);
           if (seen[r.name]) { tries++; continue; }
           seen[r.name] = true; out.push(r); tries++;
         }
-        this.results = out.map(function (x) { return { name: x.name, known: x.known }; });
+        this.results = out.map(function (x) {
+          return { name: x.name, known: x.known, issues: NameCore.analyzeName(x.given) };
+        });
         this.realResults = (this.alsoReal && this.surname.trim())
           ? NameCore.realNamesFor(this.built, this.surname, this.gender, 5)
           : [];
+      },
+      copyAll: function () {
+        var self = this;
+        var names = this.results.map(function (r) { return r.name; });
+        if (!names.length) { ElMessage.warning("还没有生成结果"); return; }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(names.join("\n")).then(function () {
+            ElMessage.success("已复制 " + names.length + " 个名字");
+          });
+        }
+      },
+      isFav: function (name) {
+        return this.favorites.some(function (f) { return f.name === name; });
+      },
+      fav: function (item) {
+        var self = this;
+        var i = this.favorites.findIndex(function (f) { return f.name === item.name; });
+        if (i >= 0) { this.favorites.splice(i, 1); ElMessage.success("已取消收藏"); }
+        else { this.favorites.push({ name: item.name, known: item.known }); ElMessage.success("已收藏，可在「收藏夹」查看"); }
+        saveFavs(this.favorites);
       },
       lookup: function () {
         var q = this.query;
@@ -233,6 +266,14 @@
                     </el-select>
                   </el-form-item>
                 </el-col>
+                <el-col :xs="12" :sm="6" :md="4">
+                  <el-form-item label="名字长度">
+                    <el-select v-model="nameLen" placeholder="请选择" style="width:100%">
+                      <el-option label="三字名" :value="3" />
+                      <el-option label="二字名" :value="2" />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
                 <el-col :xs="24" :sm="12" :md="5">
                   <el-form-item label=" ">
                     <el-button type="primary" size="large" style="width:100%" @click="generate">生成名字</el-button>
@@ -243,15 +284,19 @@
             </el-form>
 
             <div class="block">
-              <div class="block-title" v-if="results.length">为你生成 {{ results.length }} 个名字</div>
+              <div class="block-title" v-if="results.length">为你生成 {{ results.length }} 个名字
+                <el-button size="small" text type="primary" @click="copyAll" style="float:right">复制全部</el-button>
+              </div>
               <div class="name-item" v-for="(r,i) in results" :key="'g'+i">
                 <div>
                   <div class="nm">{{ r.name }}</div>
                   <div class="sub">{{ r.known ? '数据库已有人用' : '新名字，未收录' }}</div>
+                  <div class="warn" v-if="r.issues && r.issues.length">{{ r.issues.join('；') }}</div>
                 </div>
                 <div class="nm-right">
                   <el-tag :type="r.known ? 'warning' : 'success'" size="small">{{ r.known ? '已收录' : '新名字' }}</el-tag>
                   <el-button text type="primary" size="small" @click="copyName(r.name)">复制</el-button>
+                  <el-button text size="small" :type="isFav(r.name) ? 'warning' : 'info'" @click="fav(r)">{{ isFav(r.name) ? '★' : '☆' }}</el-button>
                 </div>
               </div>
               <div class="block-title" v-if="realResults.length">数据库里「{{ surname }}」姓的真实名字：</div>
@@ -260,6 +305,7 @@
                 <div class="nm-right">
                   <el-tag type="warning" size="small">已收录</el-tag>
                   <el-button text type="primary" size="small" @click="copyName(r.name)">复制</el-button>
+                  <el-button text size="small" :type="isFav(r.name) ? 'warning' : 'info'" @click="fav(r)">{{ isFav(r.name) ? '★' : '☆' }}</el-button>
                 </div>
               </div>
               <el-empty v-if="!results.length && !realResults.length" description="输入姓氏并点击「生成名字」试试" :image-size="90" />
@@ -290,6 +336,21 @@
               </div>
             </div>
             <el-empty v-else description="输入姓名开始查重" :image-size="90" />
+          </el-tab-pane>
+
+          <el-tab-pane label="收藏夹" name="favs">
+            <div class="datainfo">已收藏 {{ favCount }} 个名字</div>
+            <div class="name-item" v-for="(f,i) in favorites" :key="'f'+i">
+              <div>
+                <div class="nm">{{ f.name }}</div>
+                <div class="sub">{{ f.known ? '数据库已有人用' : '新名字' }}</div>
+              </div>
+              <div class="nm-right">
+                <el-button text type="primary" size="small" @click="copyName(f.name)">复制</el-button>
+                <el-button text type="danger" size="small" @click="fav(f)">★ 取消</el-button>
+              </div>
+            </div>
+            <el-empty v-if="!favorites.length" description="还没有收藏，去「起名字」点 ☆ 收藏" :image-size="90" />
           </el-tab-pane>
 
           <el-tab-pane label="数据管理" name="data">

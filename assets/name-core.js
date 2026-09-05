@@ -98,11 +98,24 @@
   }
 
   // ---------- 起名 ----------
-  function generate(built, surname, gender, mode) {
+  function generate(built, surname, gender, mode, nameLen) {
     const pool = poolFor(built.pools, gender);
     const sur = (surname || "").trim() || randomSurname(pool);
+    const single = nameLen === 2; // 二字名→名用一字
     let given;
-    if (mode === "trend") {
+    if (single) {
+      if (mode === "free") {
+        const agg = {};
+        for (const big in pool.big) {
+          for (const ch of Array.from(big)) agg[ch] = (agg[ch] || 0) + pool.big[big];
+        }
+        const s = sampleWeighted(weightedEntries(agg), 1);
+        given = s.length ? s[0] : "梓";
+      } else {
+        const s = sampleWeighted(weightedEntries(pool.single || {}), 1);
+        given = s.length ? s[0] : "梓";
+      }
+    } else if (mode === "trend") {
       const s = sampleWeighted(weightedEntries(pool.trend || {}), 1);
       given = s.length ? s[0] : "梓";
     } else if (mode === "free") {
@@ -110,14 +123,30 @@
       for (const big in pool.big) {
         for (const ch of Array.from(big)) agg[ch] = (agg[ch] || 0) + pool.big[big];
       }
-      const picked = sampleWeighted(weightedEntries(agg), 2);
-      given = picked.join("");
+      const s = sampleWeighted(weightedEntries(agg), 2);
+      given = s.join("");
     } else {
       const big = sampleWeighted(weightedEntries(pool.big), 1);
       given = big.length ? big[0] : "梓";
     }
     const full = sur + given;
-    return { name: full, known: built.ind.has(foldName(full)) };
+    return { name: full, known: built.ind.has(foldName(full)), given: given };
+  }
+
+  // 生僻字 / 谐音歧义检测（启发式）
+  var AVOID = "屎尿死癌丧蠢贱骚鸡狗猪牛龟鳖脓疮痨屁屌逼屄鸟遗病亡灾祸凶霉";
+  function isRareChar(ch) {
+    var c = ch.codePointAt(0);
+    return (c >= 0x3400 && c <= 0x4DBF) || c > 0x9FFF || (c >= 0xF900 && c <= 0xFAFF);
+  }
+  function analyzeName(given) {
+    var issues = [];
+    var arr = Array.from(given || "");
+    var rare = arr.filter(isRareChar);
+    if (rare.length) issues.push("含生僻字（" + rare.join("") + "），可能难输入/难辨认");
+    var bad = arr.filter(function (ch) { return AVOID.indexOf(ch) >= 0; });
+    if (bad.length) issues.push("含易谐音歧义的字（" + bad.join("") + "），建议规避");
+    return issues;
   }
 
   function realNamesFor(built, surname, gender, n) {
@@ -199,6 +228,7 @@
     generate: generate,
     realNamesFor: realNamesFor,
     lookup: lookup,
+    analyzeName: analyzeName,
     normalizeRows: normalizeRows
   };
 
