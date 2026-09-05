@@ -10,10 +10,20 @@
   function isHan(s) { return /^[\u4e00-\u9fa5]+$/.test(s); }
   function len(s) { return Array.from(String(s)).length; }
 
+  // 取名字里的「名」（去掉姓氏）：3字名=后二字，2字名=后一字，更长=最后二字
+  function givenPart(q) {
+    const arr = Array.from(q);
+    const l = arr.length;
+    if (l === 2) return arr.slice(1).join("");
+    if (l === 3) return arr.slice(1).join("");
+    if (l > 3) return arr.slice(l - 2).join("");
+    return "";
+  }
+
   // ---------- 建立索引：查重 + 起名素材 ----------
-  function buildIndexes(records) {
+  function buildIndexes(records, trend) {
     const ind = new Map();
-    const pools = { 男: { big: {}, single: {}, sur: {} }, 女: { big: {}, single: {}, sur: {} } };
+    const pools = { 男: { big: {}, single: {}, sur: {}, trend: {} }, 女: { big: {}, single: {}, sur: {}, trend: {} } };
     for (const rec of records) {
       const n = rec[0], g = rec[1];
       const k = foldName(n);
@@ -27,6 +37,15 @@
         } else if (len(n) === 2 && isHan(n)) {
           src.single[n[1]] = (src.single[n[1]] || 0) + 1;
           src.sur[n[0]] = (src.sur[n[0]] || 0) + 1;
+        }
+      }
+    }
+    // 近年流行的二字名（来自官方新生儿姓名统计），按榜单名次加权
+    if (trend) {
+      for (const g of ["男", "女"]) {
+        const arr = (trend[g] || []);
+        for (let i = 0; i < arr.length; i++) {
+          pools[g].trend[arr[i]] = (pools[g].trend[arr[i]] || 0) + (arr.length - i);
         }
       }
     }
@@ -68,7 +87,8 @@
     return {
       big: merge(pools["男"].big, pools["女"].big),
       single: merge(pools["男"].single, pools["女"].single),
-      sur: merge(pools["男"].sur, pools["女"].sur)
+      sur: merge(pools["男"].sur, pools["女"].sur),
+      trend: merge(pools["男"].trend, pools["女"].trend)
     };
   }
 
@@ -82,7 +102,10 @@
     const pool = poolFor(built.pools, gender);
     const sur = (surname || "").trim() || randomSurname(pool);
     let given;
-    if (mode === "free") {
+    if (mode === "trend") {
+      const s = sampleWeighted(weightedEntries(pool.trend || {}), 1);
+      given = s.length ? s[0] : "梓";
+    } else if (mode === "free") {
       const agg = {};
       for (const big in pool.big) {
         for (const ch of Array.from(big)) agg[ch] = (agg[ch] || 0) + pool.big[big];
@@ -115,13 +138,23 @@
   // ---------- 查重 ----------
   function lookup(built, query) {
     const k = foldName(query.trim());
+    const given = givenPart(k);
+    const trend = [];
+    const seen = {};
+    if (given) {
+      for (const g of ["男", "女"]) {
+        if (built.pools[g].trend && built.pools[g].trend[given]) {
+          if (!seen[given]) { seen[given] = true; trend.push({ gender: g, given: given }); }
+        }
+      }
+    }
     const hit = built.ind.get(k);
-    if (!hit) return { found: false };
+    if (!hit) return { found: false, trend: trend };
     const items = hit.items;
     const gc = {};
     items.forEach(it => { gc[it.gender] = (gc[it.gender] || 0) + 1; });
     const ages = [...new Set(items.map(it => it.age))].filter(Boolean);
-    return { found: true, name: hit.name, count: items.length, gender: gc, ages: ages };
+    return { found: true, name: hit.name, count: items.length, gender: gc, ages: ages, trend: trend };
   }
 
   // ---------- Excel 行解析（sheet_to_json 的 header:1 输出 -> 记录） ----------
