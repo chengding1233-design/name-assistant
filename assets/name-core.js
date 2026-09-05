@@ -25,9 +25,12 @@
   ("欧阳,司马,上官,诸葛,东方,皇甫,尉迟,公孙,慕容,司徒,司空,夏侯,长孙,宇文,令狐,轩辕,南宫,端木,西门,呼延,独孤,闻人,东郭,百里,南郭,羊舌,乐正,钟离,鲜于,万俟,公冶,宗政,濮阳,淳于,单于,太叔,申屠,公羊,仲孙,北宫,公良,拓跋,夹谷,谷梁,段干,子车,东门,漆雕,壤驷,梁丘").split(",").forEach(function (s) { COMPOUND[s] = true; });
 
   // ---------- 建立索引：查重 + 起名素材 ----------
-  function buildIndexes(records, trend) {
+  function buildIndexes(records, trend, classic) {
     const ind = new Map();
-    const pools = { 男: { big: {}, single: {}, sur: {}, trend: {} }, 女: { big: {}, single: {}, sur: {}, trend: {} } };
+    const pools = {
+      男: { big: {}, single: {}, sur: {}, trend: {}, classic: {} },
+      女: { big: {}, single: {}, sur: {}, trend: {}, classic: {} }
+    };
     for (const rec of records) {
       const n = rec[0], g = rec[1];
       const k = foldName(n);
@@ -55,6 +58,14 @@
         const arr = (trend[g] || []);
         for (let i = 0; i < arr.length; i++) {
           pools[g].trend[arr[i]] = (pools[g].trend[arr[i]] || 0) + (arr.length - i);
+        }
+      }
+    }
+    if (classic) {
+      for (const g of ["男", "女"]) {
+        const arr = (classic[g] || []);
+        for (let i = 0; i < arr.length; i++) {
+          pools[g].classic[arr[i]] = (pools[g].classic[arr[i]] || 0) + (arr.length - i);
         }
       }
     }
@@ -97,7 +108,8 @@
       big: merge(pools["男"].big, pools["女"].big),
       single: merge(pools["男"].single, pools["女"].single),
       sur: merge(pools["男"].sur, pools["女"].sur),
-      trend: merge(pools["男"].trend, pools["女"].trend)
+      trend: merge(pools["男"].trend, pools["女"].trend),
+      classic: merge(pools["男"].classic, pools["女"].classic)
     };
   }
 
@@ -126,6 +138,9 @@
       }
     } else if (mode === "trend") {
       const s = sampleWeighted(weightedEntries(pool.trend || {}), 1);
+      given = s.length ? s[0] : "梓";
+    } else if (mode === "classic") {
+      const s = sampleWeighted(weightedEntries(pool.classic || {}), 1);
       given = s.length ? s[0] : "梓";
     } else if (mode === "free") {
       const agg = {};
