@@ -20,6 +20,10 @@
     return "";
   }
 
+  // 常见复姓（用于正确拆分姓氏与名）
+  var COMPOUND = {};
+  ("欧阳,司马,上官,诸葛,东方,皇甫,尉迟,公孙,慕容,司徒,司空,夏侯,长孙,宇文,令狐,轩辕,南宫,端木,西门,呼延,独孤,闻人,东郭,百里,南郭,羊舌,乐正,钟离,鲜于,万俟,公冶,宗政,濮阳,淳于,单于,太叔,申屠,公羊,仲孙,北宫,公良,拓跋,夹谷,谷梁,段干,子车,东门,漆雕,壤驷,梁丘").split(",").forEach(function (s) { COMPOUND[s] = true; });
+
   // ---------- 建立索引：查重 + 起名素材 ----------
   function buildIndexes(records, trend) {
     const ind = new Map();
@@ -30,13 +34,18 @@
       if (!ind.has(k)) ind.set(k, { name: n, items: [] });
       ind.get(k).items.push({ gender: g, age: rec[2] });
       if (g === "男" || g === "女") {
-        const src = pools[g];
-        if (len(n) === 3 && isHan(n)) {
-          src.big[n.slice(1)] = (src.big[n.slice(1)] || 0) + 1;
-          src.sur[n[0]] = (src.sur[n[0]] || 0) + 1;
-        } else if (len(n) === 2 && isHan(n)) {
-          src.single[n[1]] = (src.single[n[1]] || 0) + 1;
-          src.sur[n[0]] = (src.sur[n[0]] || 0) + 1;
+      const src = pools[g];
+        const chars = Array.from(n);
+        const L = chars.length;
+        if (L >= 2 && isHan(n)) {
+          let surLen = 1;
+          if (L >= 3 && COMPOUND[n.slice(0, 2)]) surLen = 2;
+          const surname = chars.slice(0, surLen).join("");
+          const givenArr = chars.slice(surLen);
+          const given = givenArr.join("");
+          if (givenArr.length === 1) src.single[given] = (src.single[given] || 0) + 1;
+          else if (givenArr.length === 2) src.big[given] = (src.big[given] || 0) + 1;
+          src.sur[surname] = (src.sur[surname] || 0) + 1;
         }
       }
     }
