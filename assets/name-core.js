@@ -24,6 +24,50 @@
   var COMPOUND = {};
   ("欧阳,司马,上官,诸葛,东方,皇甫,尉迟,公孙,慕容,司徒,司空,夏侯,长孙,宇文,令狐,轩辕,南宫,端木,西门,呼延,独孤,闻人,东郭,百里,南郭,羊舌,乐正,钟离,鲜于,万俟,公冶,宗政,濮阳,淳于,单于,太叔,申屠,公羊,仲孙,北宫,公良,拓跋,夹谷,谷梁,段干,子车,东门,漆雕,壤驷,梁丘").split(",").forEach(function (s) { COMPOUND[s] = true; });
 
+  // 风格字库（用于「自由组合」按风格取字）
+  var STYLE_CHARS = {
+    "文雅": "文雅清墨书韵含茹知乐聆笙词赋",
+    "大气": "宇轩昊博睿泽铭梓弘远宸翊骁",
+    "温柔": "柔婉婷静怡安若妍佳暖澄舒沁",
+    "现代": "沐辰可欣悦子亦安晴诺言朗然",
+    "古风": "卿南北青陌简予祈疏影扶舟鸣",
+    "简约": "一尚简朴静聪谦和平直允中言"
+  };
+
+  // 典雅典籍名字的出处 / 寓意（可选）
+  var MEANINGS = {
+    "致远": "《诫子书》非宁静无以致远", "慎独": "《中庸》君子慎其独也",
+    "若愚": "《老子》大智若愚", "景行": "《诗经》高山仰止，景行行止",
+    "知行": "王阳明·知行合一", "观澜": "《孟子》观水有术，必观其澜",
+    "思齐": "《论语》见贤思齐", "见贤": "《论语》见贤思齐焉",
+    "明诚": "《中庸》自明诚", "正心": "《大学》正心诚意",
+    "守拙": "陶渊明·守拙归园田", "如琢": "《诗经》如切如磋，如琢如磨",
+    "一苇": "《诗经》一苇杭之", "三省": "《论语》吾日三省吾身",
+    "朝闻": "《论语》朝闻道", "九思": "《论语》君子有九思",
+    "素履": "《周易》素履之往", "乘月": "张若虚·不知乘月几人归",
+    "长风": "李白·长风破浪会有时", "乐山": "《论语》仁者乐山",
+    "乐水": "《论语》智者乐水", "云深": "贾岛·云深不知处",
+    "之恒": "《诗经》如月之恒", "可久": "《周易》可久则贤人之德",
+    "于飞": "凤凰于飞", "鹤鸣": "《诗经》鹤鸣九皋",
+    "怀瑾": "《楚辞》怀瑾握瑜", "清源": "朱熹·为有源头活水来",
+    "既明": "《诗经》既明且哲", "行远": "《中庸》行远必自迩",
+    "望舒": "《楚辞》前望舒使先驱", "扶摇": "《逍遥游》抟扶摇而上",
+    "若水": "《道德经》上善若水", "既白": "苏轼·东方之既白",
+    "未央": "《诗经》夜未央", "若华": "《楚辞》若华之敷",
+    "子衿": "《诗经》青青子衿", "采薇": "《诗经》采薇采薇",
+    "芷若": "香草·芷若芬芳", "疏影": "林逋·疏影横斜水清浅",
+    "暗香": "林逋·暗香浮动月黄昏", "清欢": "苏轼·人间有味是清欢",
+    "初晴": "苏轼·水光潋滟晴方好", "兰若": "香草·兰若",
+    "令仪": "《诗经》令仪令色", "其琛": "来贡其琛",
+    "知微": "《周易》知微知彰", "语冰": "《庄子》夏虫不可语冰",
+    "月白": "月白风清", "柔嘉": "《诗经》柔嘉维则",
+    "思归": "《诗经》岂不怀归", "云岫": "陶渊明·云无心以出岫",
+    "南乔": "《诗经》南有乔木", "淡月": "月色淡雅",
+    "青竹": "青竹高洁", "栖梧": "凤凰栖梧",
+    "照影": "临水照影", "嘉禾": "嘉禾瑞穗",
+    "婉清": "《诗经》清扬婉兮", "如初": "愿如初见"
+  };
+
   // ---------- 建立索引：查重 + 起名素材 ----------
   function buildIndexes(records, trend, classic) {
     const ind = new Map();
@@ -119,18 +163,30 @@
   }
 
   // ---------- 起名 ----------
-  function generate(built, surname, gender, mode, nameLen) {
+  function freeMap(pool, style) {
+    if (style && STYLE_CHARS[style]) {
+      var m = {};
+      Array.from(STYLE_CHARS[style]).forEach(function (ch) { m[ch] = (m[ch] || 0) + 1; });
+      return m;
+    }
+    var agg = {};
+    for (var big in pool.big) {
+      for (var i = 0; i < Array.from(big).length; i++) {
+        var ch = Array.from(big)[i];
+        agg[ch] = (agg[ch] || 0) + pool.big[big];
+      }
+    }
+    return agg;
+  }
+
+  function generate(built, surname, gender, mode, nameLen, style) {
     const pool = poolFor(built.pools, gender);
     const sur = (surname || "").trim() || randomSurname(pool);
     const single = nameLen === 2; // 二字名→名用一字
     let given;
     if (single) {
       if (mode === "free") {
-        const agg = {};
-        for (const big in pool.big) {
-          for (const ch of Array.from(big)) agg[ch] = (agg[ch] || 0) + pool.big[big];
-        }
-        const s = sampleWeighted(weightedEntries(agg), 1);
+        const s = sampleWeighted(weightedEntries(freeMap(pool, style)), 1);
         given = s.length ? s[0] : "梓";
       } else {
         const s = sampleWeighted(weightedEntries(pool.single || {}), 1);
@@ -143,18 +199,14 @@
       const s = sampleWeighted(weightedEntries(pool.classic || {}), 1);
       given = s.length ? s[0] : "梓";
     } else if (mode === "free") {
-      const agg = {};
-      for (const big in pool.big) {
-        for (const ch of Array.from(big)) agg[ch] = (agg[ch] || 0) + pool.big[big];
-      }
-      const s = sampleWeighted(weightedEntries(agg), 2);
+      const s = sampleWeighted(weightedEntries(freeMap(pool, style)), 2);
       given = s.join("");
     } else {
       const big = sampleWeighted(weightedEntries(pool.big), 1);
       given = big.length ? big[0] : "梓";
     }
     const full = sur + given;
-    return { name: full, known: built.ind.has(foldName(full)), given: given };
+    return { name: full, known: built.ind.has(foldName(full)), given: given, meaning: MEANINGS[given] || "" };
   }
 
   // 生僻字 / 谐音歧义检测（启发式）

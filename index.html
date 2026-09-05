@@ -31,6 +31,7 @@
   .name-item .nm { font-size:21px; font-weight:600; letter-spacing:1px; }
   .name-item .sub { font-size:11px; color:var(--muted); margin-top:2px; }
   .name-item .warn { font-size:11px; color:#c2410c; margin-top:3px; max-width:220px; }
+  .name-item .mean { font-size:11px; color:var(--brand); margin-top:3px; max-width:240px; }
   .nm-right { display:flex; align-items:center; gap:6px; }
   .search { margin-bottom:14px; }
   .res-card { background:#fff; border-radius:12px; padding:16px; }
@@ -96,12 +97,16 @@
 
   var BASE = window.__DB__;
   var ElMessage = ElementPlus.ElMessage;
+  var COMPOUND_NAMES = ["欧阳", "司马", "上官", "诸葛", "东方", "皇甫", "尉迟", "公孙", "慕容", "司徒", "司空", "夏侯", "长孙", "宇文", "令狐", "轩辕", "南宫", "端木", "西门", "独孤"];
+  var STYLE_LIST = ["文雅", "大气", "温柔", "现代", "古风", "简约"];
 
   var App = {
     data: function () {
       return {
         tab: "gen",
-        surname: "", gender: "不限", count: 10, mode: "real", nameLen: 3, alsoReal: true,
+        surname: "", gender: "不限", count: 10, mode: "real", nameLen: 3, style: "不限", alsoReal: true,
+        compoundList: COMPOUND_NAMES,
+        styleList: STYLE_LIST,
         query: "", lookupResult: null, results: [], realResults: [],
         uploading: false,
         addedRecords: loadAdded(),
@@ -135,12 +140,12 @@
         var n = parseInt(this.count, 10) || 10;
         var out = [], seen = {}, tries = 0;
         while (out.length < n && tries < n * 60) {
-          var r = NameCore.generate(this.built, this.surname, this.gender, this.mode, this.nameLen);
+          var r = NameCore.generate(this.built, this.surname, this.gender, this.mode, this.nameLen, this.style);
           if (seen[r.name]) { tries++; continue; }
           seen[r.name] = true; out.push(r); tries++;
         }
         this.results = out.map(function (x) {
-          return { name: x.name, known: x.known, issues: NameCore.analyzeName(x.given) };
+          return { name: x.name, known: x.known, issues: NameCore.analyzeName(x.given), meaning: x.meaning || "" };
         });
         this.realResults = (this.alsoReal && this.surname.trim())
           ? NameCore.realNamesFor(this.built, this.surname, this.gender, 5)
@@ -241,6 +246,13 @@
                 <el-col :xs="24" :sm="12" :md="6">
                   <el-form-item label="姓氏（可留空）"><el-input v-model="surname" placeholder="例如：李" clearable /></el-form-item>
                 </el-col>
+                <el-col :xs="24" :sm="12" :md="6">
+                  <el-form-item label="复姓（快速选）">
+                    <el-select v-model="surname" placeholder="选择常用复姓" clearable style="width:100%">
+                      <el-option v-for="s in compoundList" :key="s" :label="s" :value="s" />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
                 <el-col :xs="12" :sm="6" :md="4">
                   <el-form-item label="性别">
                     <el-select v-model="gender" placeholder="请选择" style="width:100%">
@@ -275,6 +287,14 @@
                     </el-select>
                   </el-form-item>
                 </el-col>
+                <el-col :xs="12" :sm="6" :md="4">
+                  <el-form-item label="风格（自由组合用）">
+                    <el-select v-model="style" placeholder="不限" style="width:100%">
+                      <el-option label="不限" value="不限" />
+                      <el-option v-for="st in styleList" :key="st" :label="st" :value="st" />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
                 <el-col :xs="24" :sm="12" :md="5">
                   <el-form-item label=" ">
                     <el-button type="primary" size="large" style="width:100%" @click="generate">生成名字</el-button>
@@ -292,6 +312,7 @@
                 <div>
                   <div class="nm">{{ r.name }}</div>
                   <div class="sub">{{ r.known ? '数据库已有人用' : '新名字，未收录' }}</div>
+                  <div class="mean" v-if="r.meaning">{{ r.meaning }}</div>
                   <div class="warn" v-if="r.issues && r.issues.length">{{ r.issues.join('；') }}</div>
                 </div>
                 <div class="nm-right">
